@@ -1,0 +1,30 @@
+# 密钥与本地配置（绝不入库）
+.env
+.env.local
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# 运行时 / 缓存
+*.log
+.cache/
+app.log
+
+# WorkBuddy 本地记忆（内部日志，非项目产物）
+.workbuddy/
+
+# 虚拟环境
+venv/
+.venv/
+env/
+.pydeps/
+
+# 编辑器 / 系统
+.idea/
+.vscode/
+.DS_Store
+
+.env
