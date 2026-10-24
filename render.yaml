@@ -1,0 +1,34 @@
+services:
+  - type: web
+    name: ai-detective-web
+    runtime: python
+    plan: free
+    region: singapore
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn app:app --bind 0.0.0.0:$PORT --workers 1 --threads 8 --timeout 180 --graceful-timeout 30
+    healthCheckPath: /api/status
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.13.9"
+      - key: WSA_MODE
+        value: live
+      - key: WSA_SECRET_ID
+        sync: false
+      - key: WSA_SECRET_KEY
+        sync: false
+      - key: WSA_MAX_RESULTS
+        value: "10"
+      - key: WSA_MULTIPATH
+        value: "true"
+      - key: PUBLIC_RATE_LIMIT
+        value: "true"
+      - key: SEARCHES_PER_CLIENT_DAY
+        value: "12"
+      - key: SEARCHES_TOTAL_DAY
+        value: "200"
+      - key: CODE_VERIFY
+        value: "false"
+      - key: TOKENHUB_API_KEY
+        sync: false
+      - key: HUNYUAN_MODEL
+        value: hy3
