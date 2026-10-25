@@ -154,6 +154,12 @@ textarea:focus { border-color: var(--blue); }
 .source-open { font-size: 12px; font-weight: 600; color: var(--accent); }
 .source-empty { padding: 12px 0; font-size: 13px; color: var(--muted); }
 .source .time, .cand-meta, .sb-src { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+.kind { display: inline-block; padding: 3px 7px; border-radius: 5px; font-size: 11px; font-weight: 700; }
+.kind.official { background: #e6effb; color: #1a4fa0; }
+.kind.academic { background: #efe9fb; color: #5a3a99; }
+.stance { display: inline-block; padding: 3px 7px; border-radius: 5px; font-size: 11px; font-weight: 700; }
+.stance.refute { background: #fde8e3; color: #ae3924; }
+.stance.support { background: #e5f4e7; color: #1b5c36; }
 .auth { display: inline-block; padding: 3px 7px; background: #e5f4e7; color: #1b5c36; border-radius: 5px; font-size: 12px; }
 .auth.bad { background: #fde8e3; color: #ae3924; }
 .auth.low { background: var(--soft); color: var(--muted); }

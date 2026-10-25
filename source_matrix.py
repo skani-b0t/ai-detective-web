@@ -24,6 +24,24 @@ AUTHORITY_WHITELIST = [
     "reuters.com", "apnews.com", "bbc.com", "nytimes.com", "who.int",
 ]
 
+# 国家/政府官方网站与官方机构：判定真伪时的最高权重来源
+OFFICIAL_DOMAINS = [
+    "gov.cn", "gov", "gov.uk", "gov.au", "gov.jp", "go.jp", "mil", "europa.eu",
+    "who.int", "un.org", "worldbank.org", "imf.org",
+    "nih.gov", "cdc.gov", "fda.gov", "nasa.gov", "nsf.gov",
+]
+
+# 学术论文 / 期刊 / 学术数据库：与官方信源同级
+ACADEMIC_DOMAINS = [
+    "nature.com", "science.org", "sciencedirect.com", "springer.com", "link.springer.com",
+    "ieee.org", "acm.org", "wiley.com", "tandfonline.com", "sagepub.com", "jstor.org",
+    "thelancet.com", "bmj.com", "nejm.org", "jamanetwork.com", "cell.com", "plos.org",
+    "pubmed.ncbi.nlm.nih.gov", "ncbi.nlm.nih.gov", "arxiv.org", "doi.org",
+    "cnki.net", "wanfangdata.com.cn", "cqvip.com", "scielo.org",
+    "edu.cn", "ox.ac.uk", "mit.edu", "harvard.edu", "tsinghua.edu.cn", "pku.edu.cn",
+    "cas.cn", "oxfordjournals.org",
+]
+
 # 低质 / 谣言高发的黑名单域（示例，可按需扩充）
 BLACKLIST = [
     "rumor", "cheat", "fake-news", "conspiracy", "hoax", "qianbao", "liangzuan",
@@ -42,25 +60,43 @@ def _registered_domain(url):
     return host
 
 
+def _host_matches(host, domains):
+    return any(host == d or host.endswith("." + d) for d in domains)
+
+
 def classify_domain(url, authority_level=0):
-    """返回 dict: tier(0-3) / label / whitelist(bool) / blacklist(bool) / promo(bool)。"""
+    """返回 dict: tier(0-3) / label / official / academic / whitelist / blacklist / promo。"""
     host = _registered_domain(url)
     promo = any(h in (url or "") for h in PROMO_HINTS)
     black = any(b in host for b in BLACKLIST)
     white = any(host == w or host.endswith("." + w) or ("." + w) in host
                 for w in AUTHORITY_WHITELIST)
+    official = _host_matches(host, OFFICIAL_DOMAINS)
+    academic = _host_matches(host, ACADEMIC_DOMAINS)
 
     if black:
-        return {"tier": 0, "label": "低质/疑似谣言源", "whitelist": False, "blacklist": True, "promo": promo}
+        return {"tier": 0, "label": "低质/疑似谣言源", "official": False, "academic": False,
+                "whitelist": False, "blacklist": True, "promo": promo}
+    if official:
+        return {"tier": 3, "label": "官方机构", "official": True, "academic": False,
+                "whitelist": True, "blacklist": False, "promo": promo}
+    if academic:
+        return {"tier": 3, "label": "学术论文", "official": False, "academic": True,
+                "whitelist": True, "blacklist": False, "promo": promo}
     if white:
-        return {"tier": 3, "label": "权威信源", "whitelist": True, "blacklist": False, "promo": promo}
+        return {"tier": 3, "label": "权威媒体", "official": False, "academic": False,
+                "whitelist": True, "blacklist": False, "promo": promo}
     if authority_level and authority_level >= 4:
-        return {"tier": 2, "label": "高可信", "whitelist": False, "blacklist": False, "promo": promo}
+        return {"tier": 2, "label": "高可信", "official": False, "academic": False,
+                "whitelist": False, "blacklist": False, "promo": promo}
     if host.endswith(".edu") or host.endswith(".edu.cn") or authority_level >= 3:
-        return {"tier": 2, "label": "高可信(学术/机构)", "whitelist": False, "blacklist": False, "promo": promo}
+        return {"tier": 2, "label": "高可信(学术/机构)", "official": False, "academic": True,
+                "whitelist": False, "blacklist": False, "promo": promo}
     if promo:
-        return {"tier": 0, "label": "营销号特征", "whitelist": False, "blacklist": False, "promo": True}
-    return {"tier": 1, "label": "一般信源", "whitelist": False, "blacklist": False, "promo": promo}
+        return {"tier": 0, "label": "营销号特征", "official": False, "academic": False,
+                "whitelist": False, "blacklist": False, "promo": True}
+    return {"tier": 1, "label": "一般信源", "official": False, "academic": False,
+            "whitelist": False, "blacklist": False, "promo": promo}
 
 
 def authority_weight(tier):

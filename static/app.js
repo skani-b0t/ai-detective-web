@@ -388,9 +388,15 @@ function renderClaim(it, idx) {
     const date = String(s.publish_time || "").slice(0, 10);
     const rel = Math.round((s.score || 0) * 100);
     const snippet = String(s.summary || "").trim();
+    // 官方 / 论文是判定真伪的最高权重来源，必须在依据里一眼可见
+    const kindTag = s.official ? '<span class="kind official">官方</span>'
+      : (s.academic ? '<span class="kind academic">论文</span>' : "");
+    const stanceTag = s.stance === "refute" ? '<span class="stance refute">否定</span>'
+      : (s.stance === "support" ? '<span class="stance support">证实</span>' : "");
     return `<a class="source" href="${safeUrl(s.url)}" target="_blank" rel="noopener noreferrer">
        <span class="source-head">
          <span class="source-domain">${escapeHtml(host)}</span>
+         ${kindTag}${stanceTag}
          ${a.label ? `<span class="${authCls}">${escapeHtml(a.label)}</span>` : ""}
          <span class="source-rel">相关 ${rel}%</span>
        </span>

@@ -33,7 +33,36 @@ from hunyuan import chat, chat_json
 
 _CONFLICT_MARKERS = ["不实", "辟谣", "系谣言", "谣言", "虚假", "造谣", "并未",
                      "不存在", "否认", "已辟谣", "fake", "false", "debunk", "查无此事", "误区", "骗局"]
+
+# 判定一条信源「说了真还是假」用的措辞特征。只用于官方/论文级信源，
+# 命中数量取多者，平手视为未表态（宁可说不知道，也不猜）。
+_REFUTE_MARKERS = ["辟谣", "不实", "谣言", "虚假", "造谣", "否认", "并非", "不是真的",
+                   "未发现", "不存在", "无科学依据", "没有证据", "不能", "无法", "误区",
+                   "骗局", "误传", "不成立", "no evidence", "not true", "false", "debunk", "myth"]
+_SUPPORT_MARKERS = ["证实", "确认", "确有", "属实", "研究表明", "研究显示", "数据显示",
+                    "已证实", "证明", "真实存在", "有效", "evidence shows", "confirmed",
+                    "demonstrated", "found that"]
 _PUNCT = re.compile(r"[^\w一-鿿]")
+
+
+def _stance(text):
+    """返回 'refute' / 'support' / ''（未表态）。"""
+    t = (text or "").lower()
+    ref = sum(1 for m in _REFUTE_MARKERS if m in t)
+    sup = sum(1 for m in _SUPPORT_MARKERS if m in t)
+    if ref > sup:
+        return "refute"
+    if sup > ref:
+        return "support"
+    return ""
+
+
+def _src_kind(authority):
+    if authority.get("official"):
+        return "国家官方信源"
+    if authority.get("academic"):
+        return "学术论文"
+    return "权威媒体"
 
 
 def _bigrams(text):
@@ -156,24 +185,47 @@ def verify_claim(claim, query, results, idx=0, use_llm=True, semantic=None,
     else:
         support = round(0.5 * overlap + 0.5 * authority_ratio, 3)
 
+    # ——— 官方 / 论文优先：判定真伪只看最高权重来源 ———
+    # 规则：官方机构（gov / 国际组织）或学术论文明确说是 → 真；明确说否 → 假。
+    # 它们没表态时，其余来源再多也只能到「存疑」，不判真。
+    official_hits = []
+    for r in results:
+        a = r.get("authority") or {}
+        if a.get("official") or a.get("academic"):
+            official_hits.append((r, _stance((r.get("title") or "") + " " + (r.get("summary") or "")), a))
+    off_ref = next((x for x in official_hits if x[1] == "refute"), None)
+    off_sup = next((x for x in official_hits if x[1] == "support"), None)
+
     # 四态判定
     refute = semantic and semantic["verdict"] == "refute" and semantic["confidence"] >= 0.6
     support_ok = semantic and semantic["verdict"] == "support" and semantic["confidence"] >= 0.6
-    if conflict and (authority_hits > 0 or refute):
+    if off_ref:
+        src = off_ref[0]
+        verdict, label = "❌", "官方/论文判定为假"
+        note = f"最高权重来源（{_src_kind(off_ref[2])}）《{src.get('title', '')}》明确否定该说法，判定为假。"
+    elif off_sup:
+        src = off_sup[0]
+        verdict, label = "✅", "官方/论文证实"
+        note = f"最高权重来源（{_src_kind(off_sup[2])}）《{src.get('title', '')}》明确证实该说法，判定为真。"
+    elif official_hits:
+        verdict, label = "⚠️", "存疑"
+        note = f"检索到 {len(official_hits)} 条官方/论文级来源，但都没有明确肯定或否定，需打开原文人工确认。"
+    elif conflict and (authority_hits > 0 or refute):
         verdict, label = "❌", "与信源冲突"
         note = f"检索到权威信源明确否定/辟谣该说法" + (f"（如：{conflict_src}）" if conflict_src else "") + "。"
     elif refute:
         verdict, label = "❌", "与信源冲突"
         note = f"语义核验判定为反驳：{semantic['reason']}"
     elif conflict:
-        # 检索到「不实 / 辟谣 / 否认」这类否定表述，但没有权威源直接确认，也没有语义复核兜底。
-        # 这时不能说「支撑力度一般」——那是在骗用户，真实情况是「有反面线索但不够定案」。
+        # 检索到「不实 / 辟谣 / 否认」这类否定表述，但没有官方/论文直接确认。
+        # 这时不能说「支撑力度一般」——真实情况是「有反面线索但不够定案」。
         verdict, label = "⚠️", "存疑"
-        note = "检索到含否定/辟谣表述的信源，但缺少权威信源直接确认，暂判存疑。"
+        note = "检索到含否定/辟谣表述的信源，但缺少官方或论文级来源直接确认，暂判存疑。"
     elif support_ok or support >= 0.5:
-        verdict, label = "✅", "有据可查"
-        note = "多层证据一致支撑，结论可追溯。"
-    elif support >= 0.25 or (semantic and semantic["verdict"] == "support"):
+        # 没有官方/论文表态就不能判真：多方转述一致只说明「大家都在说」，不等于「已经证实」。
+        verdict, label = "⚠️", "未获确证"
+        note = "多个信源说法一致，但没有检索到官方机构或学术论文直接证实，按规则不判为真。"
+    elif support >= 0.25:
         verdict, label = "⚠️", "存疑"
         note = "有相关结果但支撑力度一般，或证据相互矛盾，建议进一步核实。"
     elif independent_domains == 0 or support < 0.15:
@@ -181,22 +233,31 @@ def verify_claim(claim, query, results, idx=0, use_llm=True, semantic=None,
         note = "相关信源不足，暂无法支撑该说法。"
     else:
         verdict, label = "⚠️", "存疑"
-        note = "证据偏向存疑，建议补充权威信源核实。"
+        note = "证据偏向存疑，建议补充官方或论文级信源核实。"
 
     # ——— ⑦ 代码核验（数值型）影响 ———
     if code_result:
         verdict, label, note = _code_influence(verdict, label, note, code_result, support)
         support = verdict_support_apply(support, code_result)
 
-    sources = [{
-        "title": r.get("title", ""), "url": r.get("url", ""),
-        "score": r.get("score", 0), "publish_time": r.get("publish_time", ""),
-        "source": r.get("source", _domain(r.get("url", ""))),
-        # 摘要：搜索结果的正文片段，前端用来告诉用户「这条信源到底说了什么」
-        "summary": (r.get("summary") or "").strip()[:240],
-        "authority_level": r.get("authority_level", 0),
-        "authority": r.get("authority", {"tier": 1, "label": "一般信源"}),
-    } for r in results[:5]]
+    # 依据排序：官方/论文永远排在最前——用户最先看到的就是做出判定的那条
+    src_items = []
+    for r in results[:5]:
+        a = r.get("authority") or {}
+        src_items.append({
+            "title": r.get("title", ""), "url": r.get("url", ""),
+            "score": r.get("score", 0), "publish_time": r.get("publish_time", ""),
+            "source": r.get("source", _domain(r.get("url", ""))),
+            # 摘要：搜索结果的正文片段，前端用来告诉用户「这条信源到底说了什么」
+            "summary": (r.get("summary") or "").strip()[:240],
+            "official": bool(a.get("official")),
+            "academic": bool(a.get("academic")),
+            "stance": _stance((r.get("title") or "") + " " + (r.get("summary") or "")),
+            "authority_level": r.get("authority_level", 0),
+            "authority": r.get("authority", {"tier": 1, "label": "一般信源"}),
+        })
+    src_items.sort(key=lambda s: (0 if (s["official"] or s["academic"]) else 1, -s["score"]))
+    sources = src_items
 
     layers = {
         "conflict": conflict, "overlap": overlap,
