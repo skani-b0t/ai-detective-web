@@ -25,7 +25,7 @@ from concurrent.futures import ThreadPoolExecutor
 from config import (WSA_MODE, LLM_SEMANTIC, SEMANTIC_MAX, LLM_FUSION, TOKENHUB_API_KEY,
                     CODE_VERIFY, CODE_MAX, CODE_BUDGET, REPLAN_MIN)
 from claim_extractor import analyze_claims
-from wsa_client import search_multi
+from wsa_client import search_multi, search_official
 from source_matrix import authority_weight
 from rewriter import broaden_query
 from code_verify import verify_numeric, is_numeric_claim, is_computable_claim
@@ -63,6 +63,48 @@ def _src_kind(authority):
     if authority.get("academic"):
         return "学术论文"
     return "权威媒体"
+
+
+def _has_high_weight(results):
+    """整批结果里是否有官方/论文级来源。"""
+    for r in results or []:
+        a = r.get("authority") or {}
+        if a.get("official") or a.get("academic"):
+            return True
+    return False
+
+
+def _llm_stances(claim, hits):
+    """让 hy3 判断每条官方/论文来源对断言的态度（支持/否定/无关）。
+
+    关键词匹配会把「是真的吗？」「辟谣」这类标题判反，有模型时优先用模型。
+    无 Key 或解析失败返回 None，调用方回退到关键词结果。
+    """
+    if not (TOKENHUB_API_KEY and LLM_SEMANTIC) or not hits:
+        return None
+    lines = []
+    for i, (r, _kw, _a) in enumerate(hits[:4], 1):
+        lines.append(f"{i}. 标题：{r.get('title', '')}\n   摘要：{(r.get('summary') or '')[:160]}")
+    prompt = (f"断言：{claim}\n\n以下是官方/学术来源的检索结果：\n" + "\n".join(lines) +
+              '\n\n判断每条来源对这条断言的态度。只输出 JSON：'
+              '{"items":[{"i":1,"stance":"support|refute|unrelated"}]}')
+    out = chat_json(
+        prompt,
+        system_prompt="你是严谨的事实核查员，只依据给出的标题与摘要判断，不要推测，不要补充常识。",
+        temperature=0,
+    )
+    if not isinstance(out, dict) or not isinstance(out.get("items"), list):
+        return None
+    mapping = {}
+    for x in out["items"]:
+        try:
+            idx = int(x.get("i"))
+        except (TypeError, ValueError):
+            continue
+        st = str(x.get("stance", "")).strip().lower()
+        if st in ("support", "refute", "unrelated"):
+            mapping[idx - 1] = "" if st == "unrelated" else st
+    return mapping or None
 
 
 def _bigrams(text):
@@ -193,8 +235,14 @@ def verify_claim(claim, query, results, idx=0, use_llm=True, semantic=None,
         a = r.get("authority") or {}
         if a.get("official") or a.get("academic"):
             official_hits.append((r, _stance((r.get("title") or "") + " " + (r.get("summary") or "")), a))
+    # 有模型时用模型判立场，关键词只作兜底
+    llm_st = _llm_stances(claim, official_hits)
+    if llm_st:
+        official_hits = [(r, llm_st.get(i, kw), a) for i, (r, kw, a) in enumerate(official_hits)]
     off_ref = next((x for x in official_hits if x[1] == "refute"), None)
     off_sup = next((x for x in official_hits if x[1] == "support"), None)
+    # 依据卡片上的立场标签要和判定用同一套结论，否则会出现「判定说支持、标签却空着」
+    src_stance = {id(r): st for r, st, _a in official_hits}
 
     # 四态判定
     refute = semantic and semantic["verdict"] == "refute" and semantic["confidence"] >= 0.6
@@ -223,6 +271,12 @@ def verify_claim(claim, query, results, idx=0, use_llm=True, semantic=None,
         # 这时不能说「支撑力度一般」——真实情况是「有反面线索但不够定案」。
         verdict, label = "⚠️", "存疑"
         note = "检索到含否定/辟谣表述的信源，但缺少官方或论文级来源直接确认，暂判存疑。"
+    elif support >= 0.55 and independent_domains >= 3:
+        # 放宽档：没有官方/论文来源，但多个独立信源说法一致。
+        # 判真，但必须标明这是次级结论，不能和官方证实混为一谈。
+        verdict, label = "✅", "多方一致（非官方确认）"
+        note = (f"{independent_domains} 个独立信源说法一致（支持度 {round(support * 100)}%），"
+                f"但未检索到官方或论文级来源；此为次级结论，建议核对原始出处。")
     elif support_ok or support >= 0.5:
         # 没有官方/论文表态就不能判真：多方转述一致只说明「大家都在说」，不等于「已经证实」。
         verdict, label = "⚠️", "未获确证"
@@ -254,7 +308,7 @@ def verify_claim(claim, query, results, idx=0, use_llm=True, semantic=None,
             "summary": (r.get("summary") or "").strip()[:240],
             "official": bool(a.get("official")),
             "academic": bool(a.get("academic")),
-            "stance": _stance((r.get("title") or "") + " " + (r.get("summary") or "")),
+            "stance": src_stance.get(id(r), _stance((r.get("title") or "") + " " + (r.get("summary") or ""))),
             "authority_level": r.get("authority_level", 0),
             "authority": r.get("authority", {"tier": 1, "label": "一般信源"}),
         })
@@ -334,10 +388,24 @@ def verify_text(text, scene="ai", use_llm=True):
     eff_scene = intent["scene"]
     queries = [rewrites.get(c, c) for c in claims]
 
-    # ④ 多路信息源检索
+    # ④ 多路信息源检索（+ 官方/论文定向补检）
+    official_fetch = []
+
     def _search_one(args):
         c, q = args
-        return search_multi(q, scene=eff_scene, intent=intent)
+        res = search_multi(q, scene=eff_scene, intent=intent)
+        # 泛搜常把官方页面排到新闻后面，导致「本来有官方依据却判成存疑」。
+        # 首轮没有官方/论文级来源时，补一次 Mode=1 垂直权威（gov / acad）。
+        if not _has_high_weight(res):
+            try:
+                extra = search_official(q, scene=eff_scene)
+            except Exception as exc:  # noqa: BLE001
+                print(f"[verify] 官方定向检索失败（不影响主流程）：{exc}")
+                extra = []
+            if extra:
+                official_fetch.append(q)
+                res = _merge_results(res, extra)
+        return res
 
     with ThreadPoolExecutor(max_workers=min(len(claims), 6) or 1) as ex:
         all_results = list(ex.map(_search_one, list(zip(claims, queries))))
@@ -460,7 +528,9 @@ def verify_text(text, scene="ai", use_llm=True):
          "engine": ("hunyuan" if (use_llm and TOKENHUB_API_KEY) else "原句(无Key)")},
         {"stage": "③ 查询拆分", "detail": f"拆出 {len(claims)} 条可查证断言",
          "engine": extract_method},
-        {"stage": "④ 多路信息源检索", "detail": f"元宝搜索多路并行 → {raw_total} 条原始结果",
+        {"stage": "④ 多路信息源检索",
+         "detail": (f"元宝搜索多路并行 → {raw_total} 条原始结果"
+                    + (f"（另对 {len(official_fetch)} 条断言补检官方/论文库）" if official_fetch else "")),
          "engine": "live" if WSA_MODE == "live" else "offline"},
         {"stage": "⑤ 检索重规划", "detail": f"{replan_count} 条首轮稀薄已回填检索" if replan_count
          else "首轮结果充足，无需重规划", "engine": "规则"},

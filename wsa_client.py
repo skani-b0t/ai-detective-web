@@ -203,3 +203,38 @@ def search_multi(query, scene="ai", intent=None):
     out = list(seen.values())
     out.sort(key=lambda x: x.get("score", 0), reverse=True)
     return _tag_authority(out[:15])
+
+
+def search_official(query, scene="ai", cnt=10):
+    """官方 / 论文定向检索：Mode=1 垂直权威 + Industry=gov（政府）/ acad（学术）。
+
+    泛搜时官方页面常常排在新闻后面，导致「本来有官方依据却判成存疑」。
+    这里单独走两路垂直权威检索，只在首轮没有官方/论文来源时补一次。
+    """
+    if WSA_MODE == "offline":
+        return _tag_authority(mock_search(query, scene))
+    if not (WSA_SECRET_ID and WSA_SECRET_KEY):
+        raise RuntimeError("真实搜索未启用：请配置 WSA_SECRET_ID 和 WSA_SECRET_KEY")
+
+    def _one(ind):
+        res = _search_live(query, mode=1, cnt=cnt, industry=ind)
+        for r in res:
+            r["path"] = "gov" if ind == "gov" else "acad"
+        return res
+
+    merged = []
+    with ThreadPoolExecutor(max_workers=2) as ex:
+        for res in ex.map(_one, ["gov", "acad"]):
+            merged.extend(res)
+
+    seen = {}
+    for r in merged:
+        u = r.get("url", "")
+        if u and u in seen:
+            seen[u]["paths"].append(r.get("path"))
+            continue
+        r.setdefault("paths", [r.get("path")])
+        seen[u] = r
+    out = list(seen.values())
+    out.sort(key=lambda x: x.get("score", 0), reverse=True)
+    return _tag_authority(out[:10])
