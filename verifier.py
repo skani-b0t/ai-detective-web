@@ -84,7 +84,9 @@ def _llm_stances(claim, hits):
         return None
     lines = []
     for i, (r, _kw, _a) in enumerate(hits[:4], 1):
-        lines.append(f"{i}. 标题：{r.get('title', '')}\n   摘要：{(r.get('summary') or '')[:160]}")
+        # 摘要给到 400 字：官方统计页的关键数字常在正文靠后的位置，
+        # 只给 160 字会让模型看到「预期目标圆满实现」却看不到「5%」，误判成无关。
+        lines.append(f"{i}. 标题：{r.get('title', '')}\n   正文片段：{(r.get('summary') or '')[:400]}")
     prompt = (f"断言：{claim}\n\n以下是官方/学术来源的检索结果：\n" + "\n".join(lines) +
               '\n\n判断每条来源对这条断言的态度。只输出 JSON：'
               '{"items":[{"i":1,"stance":"support|refute|unrelated"}]}')
