@@ -367,6 +367,7 @@ function renderReport(d) {
   tech.push(d.engine_mode === "live" ? "🔌 元宝搜索·多路实时检索" : "💾 离线样例检索");
   if (d.narrative) tech.push("🧩 混元融合总评");
   tech.push("🧮 代码核验已接入");
+  tech.push("🏛️ 官方 / 论文优先定真伪");
   $("techline").textContent = tech.join("  ·  ");
   $("humanloop").textContent = "";
 }

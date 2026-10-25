@@ -202,11 +202,13 @@ def verify_claim(claim, query, results, idx=0, use_llm=True, semantic=None,
     if off_ref:
         src = off_ref[0]
         verdict, label = "❌", "官方/论文判定为假"
-        note = f"最高权重来源（{_src_kind(off_ref[2])}）《{src.get('title', '')}》明确否定该说法，判定为假。"
+        note = (f"最高权重来源（{_src_kind(off_ref[2])}）《{src.get('title', '')}》的表述否定该说法，"
+                f"据此判定为假。")
     elif off_sup:
         src = off_sup[0]
         verdict, label = "✅", "官方/论文证实"
-        note = f"最高权重来源（{_src_kind(off_sup[2])}）《{src.get('title', '')}》明确证实该说法，判定为真。"
+        note = (f"最高权重来源（{_src_kind(off_sup[2])}）《{src.get('title', '')}》的表述支持该说法，"
+                f"据此判定为真。")
     elif official_hits:
         verdict, label = "⚠️", "存疑"
         note = f"检索到 {len(official_hits)} 条官方/论文级来源，但都没有明确肯定或否定，需打开原文人工确认。"
