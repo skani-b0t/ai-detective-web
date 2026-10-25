@@ -146,20 +146,22 @@ def _tag_authority(results):
 
 # 多路检索的「路」配置：(tag, Mode, Industry, Freshness)
 # Mode: 0 自然结果 / 1 垂直权威(VR) / 2 混合
+# 实测：本账号 Mode=1 恒定返回 0 条（白花调用），所以官方/学术一路改用
+# Mode=2 + Industry=gov/acad 的行业过滤，这才是真的能捞到政府站和论文的做法。
 _PATHS_RUMOR = [
     ("news_y", 2, "news", "y1"),
-    ("vr", 1, None, "y1"),
+    ("gov", 2, "gov", None),
 ]
 _PATHS_AI = [
     ("mixed", 2, None, "y1"),
-    ("vr", 1, None, None),
+    ("gov", 2, "gov", None),
     ("acad", 2, "acad", None),
 ]
 # 「查最新」：两条路都带强时效约束（一个月内新闻 + 一周内自然结果），突出分钟级更新卖点
 _PATHS_LATEST = [
     ("news_m1", 2, "news", "m1"),
     ("fresh_w1", 2, None, "w1"),
-    ("vr", 1, None, None),
+    ("gov", 2, "gov", None),
 ]
 
 
@@ -206,10 +208,11 @@ def search_multi(query, scene="ai", intent=None):
 
 
 def search_official(query, scene="ai", cnt=10):
-    """官方 / 论文定向检索：Mode=1 垂直权威 + Industry=gov（政府）/ acad（学术）。
+    """官方 / 论文定向检索：Mode=2 混合 + Industry=gov（政府）/ acad（学术）。
 
     泛搜时官方页面常常排在新闻后面，导致「本来有官方依据却判成存疑」。
-    这里单独走两路垂直权威检索，只在首轮没有官方/论文来源时补一次。
+    这里单独走两路行业过滤检索，只在首轮没有官方/论文来源时补一次。
+    Mode=1（垂直权威）本账号实测恒返回 0 条，故不用。
     """
     if WSA_MODE == "offline":
         return _tag_authority(mock_search(query, scene))
@@ -217,7 +220,7 @@ def search_official(query, scene="ai", cnt=10):
         raise RuntimeError("真实搜索未启用：请配置 WSA_SECRET_ID 和 WSA_SECRET_KEY")
 
     def _one(ind):
-        res = _search_live(query, mode=1, cnt=cnt, industry=ind)
+        res = _search_live(query, mode=2, cnt=cnt, industry=ind)
         for r in res:
             r["path"] = "gov" if ind == "gov" else "acad"
         return res
