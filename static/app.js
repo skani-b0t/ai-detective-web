@@ -54,6 +54,7 @@ const reportEl = $("report-card");  // 注意：按钮 id="report" 用于导出�
 const PROG_STEPS = ["意图识别与对齐", "查询改写", "查询拆分", "多路信息源检索",
   "检索重规划", "多层过滤", "代码核验（数值型）", "跨源交叉验证", "内容融合与生成"];
 let _prog = null;
+let _progTick = null;
 
 function startProgress() {
   $("prog-steps").innerHTML = PROG_STEPS.map((s, i) =>
@@ -75,9 +76,17 @@ function startProgress() {
       idx++;
       _prog = setTimeout(tick, 1100);
     } else {
-      $("prog-hint").textContent = "最后一步：混元正在生成总评…";
+      $("prog-hint").textContent = "混元正在逐条核验并生成总评…";
       $("prog-bar-inner").style.width = "92%";
-      $("prog-foot").textContent = "这一步是推理模型写总评，通常需要 20–60 秒，请稍候。";
+      // 推理模型这一段是真慢（多断言实测 60–120 秒），把已等待秒数跑出来，
+      // 否则用户会以为页面卡死。
+      const t0 = Date.now();
+      const tickSec = () => {
+        const s = Math.round((Date.now() - t0) / 1000);
+        $("prog-foot").textContent = `推理模型逐条判定立场并撰写总评，已等待 ${s} 秒（多断言通常 60–120 秒）`;
+        _progTick = setTimeout(tickSec, 1000);
+      };
+      tickSec();
     }
   };
   tick();
@@ -85,6 +94,7 @@ function startProgress() {
 
 function stopProgress() {
   if (_prog) { clearTimeout(_prog); _prog = null; }
+  if (_progTick) { clearTimeout(_progTick); _progTick = null; }
   $("progress-card").classList.add("hidden");
 }
 

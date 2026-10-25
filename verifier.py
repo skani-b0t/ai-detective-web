@@ -22,7 +22,7 @@
 import re
 import time
 from concurrent.futures import ThreadPoolExecutor
-from config import (WSA_MODE, LLM_SEMANTIC, SEMANTIC_MAX, LLM_FUSION, TOKENHUB_API_KEY,
+from config import (WSA_MODE, LLM_SEMANTIC, SEMANTIC_MAX, LLM_STANCE_MAX, LLM_FUSION, TOKENHUB_API_KEY,
                     CODE_VERIFY, CODE_MAX, CODE_BUDGET, REPLAN_MIN)
 from claim_extractor import analyze_claims
 from wsa_client import search_multi, search_official
@@ -235,8 +235,13 @@ def verify_claim(claim, query, results, idx=0, use_llm=True, semantic=None,
         a = r.get("authority") or {}
         if a.get("official") or a.get("academic"):
             official_hits.append((r, _stance((r.get("title") or "") + " " + (r.get("summary") or "")), a))
-    # 有模型时用模型判立场，关键词只作兜底
-    llm_st = _llm_stances(claim, official_hits)
+    # 有模型时用模型判立场，关键词只作兜底。
+    # 只在「关键词拿不准」或「官方来源之间打架」时才花这次调用，且单次查证最多 LLM_STANCE_MAX 条断言。
+    kw_stances = [st for _r, st, _a in official_hits]
+    ambiguous = any(st == "" for st in kw_stances)
+    clashing = ("refute" in kw_stances) and ("support" in kw_stances)
+    need_llm = bool(official_hits) and idx < LLM_STANCE_MAX and (ambiguous or clashing)
+    llm_st = _llm_stances(claim, official_hits) if need_llm else None
     if llm_st:
         official_hits = [(r, llm_st.get(i, kw), a) for i, (r, kw, a) in enumerate(official_hits)]
     off_ref = next((x for x in official_hits if x[1] == "refute"), None)
@@ -247,7 +252,11 @@ def verify_claim(claim, query, results, idx=0, use_llm=True, semantic=None,
     # 四态判定
     refute = semantic and semantic["verdict"] == "refute" and semantic["confidence"] >= 0.6
     support_ok = semantic and semantic["verdict"] == "support" and semantic["confidence"] >= 0.6
-    if off_ref:
+    if off_ref and off_sup:
+        # 官方之间也打架时不能挑一条有利的当结论
+        verdict, label = "⚠️", "存疑"
+        note = "官方/论文级来源之间结论不一致（既有否定也有支持），需人工核对原文后再定。"
+    elif off_ref:
         src = off_ref[0]
         verdict, label = "❌", "官方/论文判定为假"
         note = (f"最高权重来源（{_src_kind(off_ref[2])}）《{src.get('title', '')}》的表述否定该说法，"

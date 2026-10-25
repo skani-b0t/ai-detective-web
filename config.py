@@ -41,6 +41,10 @@ WSA_MULTIPATH = os.getenv("WSA_MULTIPATH", "true").lower() == "true"  # ④ 多�
 # 单次查证最多对多少条断言跑「混元语义核验」（控成本/时延），其余走规则判定
 SEMANTIC_MAX = int(os.getenv("SEMANTIC_MAX", "4"))
 
+# 单次查证最多对几条断言调用混元「官方来源立场」判定。
+# 一条断言一次调用，hy3 单次 10–25 秒，不设上限时 5 条断言能拖到 2 分钟。
+LLM_STANCE_MAX = int(os.getenv("LLM_STANCE_MAX", "2"))
+
 # ① Coder 代码核验（对数值型断言用 Python 沙箱核算）
 CODE_VERIFY = os.getenv("CODE_VERIFY", "true").lower() == "true"
 CODE_MAX = int(os.getenv("CODE_MAX", "3"))          # 单次查证最多对几条数值断言跑代码核验（控成本）
