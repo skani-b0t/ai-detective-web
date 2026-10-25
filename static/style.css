@@ -125,6 +125,19 @@ textarea:focus { border-color: var(--blue); }
 .verdict { font-size: 21px; }
 .vlabel { font-weight: 700; }
 .claim-text { font-size: 19px; font-weight: 700; line-height: 1.55; margin: 14px 0; }
+
+/* 判定条：结论永远在最上面，依据在下面 */
+.verdict-block { display: grid; grid-template-columns: auto 1fr; gap: 14px; align-items: start; padding: 18px 20px; border-radius: 12px; background: #fff; border: 1px solid var(--line); }
+.claim.ok .verdict-block { background: #eef7f0; border-color: #cbe3d0; }
+.claim.bad .verdict-block { background: #fdeee9; border-color: #f0cdc1; }
+.claim.warn .verdict-block { background: #fdf7e8; border-color: #eddcb6; }
+.claim.noev .verdict-block { background: #f2f3f5; border-color: #dbdee2; }
+.vb-mark { font-size: 30px; line-height: 1.05; }
+.vb-body { min-width: 0; }
+.vb-label { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; font-size: 21px; font-weight: 800; letter-spacing: -.025em; line-height: 1.2; }
+.vb-meta { font-size: 12px; font-weight: 600; color: var(--muted); letter-spacing: 0; }
+.vb-claim { margin-top: 10px; font-size: 15px; line-height: 1.65; color: var(--ink); opacity: .82; }
+.vb-reason { margin-top: 8px; font-size: 14px; line-height: 1.65; color: var(--muted); }
 .claim-note, .claim-query, .replan, .code-verify { color: var(--muted); font-size: 14px; margin: 8px 0; }
 .sources { display: grid; gap: 8px; margin-top: 18px; }
 .sources-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }

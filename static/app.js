@@ -423,19 +423,31 @@ function renderClaim(it, idx) {
     `<button class="hl-chip ${ov && ov.verdict === v ? "active" : ""}" data-idx="${idx}" data-v="${v}">${v}</button>`).join("");
   const ovTag = ov ? `<span class="ov-tag">✋ 用户复核</span>` : "";
 
+  // 结论先行：判定条放最上面，网络依据统一收在下面，读者先拿到「真/假」，再决定要不要看证据
+  const rep = state.report || {};
+  const vbMeta = [
+    rep.consistency != null ? `一致性 ${Math.round(rep.consistency)}%` : "",
+    typeof it.support === "number" ? `支持度 ${Math.round(it.support * 100)}%` : "",
+  ].filter(Boolean).join(" · ");
+
   div.innerHTML = `
-    <div class="claim-top">
-      <span class="verdict" id="v-${idx}">${dispV}</span>
-      <span class="vlabel" id="vl-${idx}">${dispL}</span>
-      ${sem} ${ovTag}
+    <div class="verdict-block">
+      <span class="vb-mark verdict" id="v-${idx}">${dispV}</span>
+      <div class="vb-body">
+        <div class="vb-label">
+          <span id="vl-${idx}">${dispL}</span>
+          ${vbMeta ? `<span class="vb-meta">${vbMeta}</span>` : ""}
+          ${sem} ${ovTag}
+        </div>
+        <div class="vb-claim">待查断言：「${escapeHtml(it.claim)}」</div>
+        <div class="vb-reason">判定依据：${escapeHtml(it.note)}</div>
+      </div>
     </div>
-    <div class="claim-text">${escapeHtml(it.claim)}</div>
     ${q}
-    <div class="claim-note">${escapeHtml(it.note)}</div>
     ${codeLine}
     ${replanLine}
     <div class="sources">${sources
-      ? `<div class="sources-head"><span class="sources-label">证据来源</span><span class="sources-count">${srcList.length} 条 · ${domainCount} 个独立站点</span></div>${sources}`
+      ? `<div class="sources-head"><span class="sources-label">网络依据</span><span class="sources-count">${srcList.length} 条 · ${domainCount} 个独立站点</span></div>${sources}`
       : '<span class="source-empty">这一条没有找到可用信源，所以不下结论。</span>'}</div>
     <div class="human-loop">
       <span class="hl-label">✋ 人工复核（点选你的判定）：</span>
