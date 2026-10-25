@@ -431,7 +431,7 @@ function renderClaim(it, idx) {
     </div>
     <div class="claim-text">${escapeHtml(it.claim)}</div>
     ${q}
-    <div class="claim-note">${it.note}</div>
+    <div class="claim-note">${escapeHtml(it.note)}</div>
     ${codeLine}
     ${replanLine}
     <div class="sources">${sources
