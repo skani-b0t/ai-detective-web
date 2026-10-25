@@ -165,6 +165,11 @@ def verify_claim(claim, query, results, idx=0, use_llm=True, semantic=None,
     elif refute:
         verdict, label = "❌", "与信源冲突"
         note = f"语义核验判定为反驳：{semantic['reason']}"
+    elif conflict:
+        # 检索到「不实 / 辟谣 / 否认」这类否定表述，但没有权威源直接确认，也没有语义复核兜底。
+        # 这时不能说「支撑力度一般」——那是在骗用户，真实情况是「有反面线索但不够定案」。
+        verdict, label = "⚠️", "存疑"
+        note = "检索到含否定/辟谣表述的信源，但缺少权威信源直接确认，暂判存疑。"
     elif support_ok or support >= 0.5:
         verdict, label = "✅", "有据可查"
         note = "多层证据一致支撑，结论可追溯。"
