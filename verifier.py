@@ -187,6 +187,8 @@ def verify_claim(claim, query, results, idx=0, use_llm=True, semantic=None,
         "title": r.get("title", ""), "url": r.get("url", ""),
         "score": r.get("score", 0), "publish_time": r.get("publish_time", ""),
         "source": r.get("source", _domain(r.get("url", ""))),
+        # 摘要：搜索结果的正文片段，前端用来告诉用户「这条信源到底说了什么」
+        "summary": (r.get("summary") or "").strip()[:240],
         "authority_level": r.get("authority_level", 0),
         "authority": r.get("authority", {"tier": 1, "label": "一般信源"}),
     } for r in results[:5]]

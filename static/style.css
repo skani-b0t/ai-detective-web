@@ -1,4 +1,4 @@
-﻿:root {
+:root {
   --bg: #f7f8f6;
   --ink: #13211d;
   --muted: #68736e;
@@ -9,8 +9,13 @@
   --accent-dark: #b93420;
   --blue: #1b63d9;
   --dark: #13211d;
-  --display: 'Manrope', 'Noto Sans SC', sans-serif;
-  --text: 'Noto Sans SC', 'Manrope', sans-serif;
+  /* 只用系统字体：不走 Google Fonts，国内打开不会卡在字体请求上。
+     Windows 落到 Segoe UI + 微软雅黑，macOS 落到 SF Pro + 苹方，Android 落到思源/Noto。 */
+  --display: system-ui, -apple-system, 'Segoe UI Variable Display', 'Segoe UI',
+             'PingFang SC', 'HarmonyOS Sans SC', 'Microsoft YaHei UI', 'Microsoft YaHei',
+             'Noto Sans SC', sans-serif;
+  --text: system-ui, -apple-system, 'Segoe UI', 'PingFang SC', 'HarmonyOS Sans SC',
+          'Microsoft YaHei UI', 'Microsoft YaHei', 'Noto Sans SC', sans-serif;
   --radius: 18px;
 }
 * { box-sizing: border-box; }
@@ -122,10 +127,20 @@ textarea:focus { border-color: var(--blue); }
 .claim-text { font-size: 19px; font-weight: 700; line-height: 1.55; margin: 14px 0; }
 .claim-note, .claim-query, .replan, .code-verify { color: var(--muted); font-size: 14px; margin: 8px 0; }
 .sources { display: grid; gap: 8px; margin-top: 18px; }
-.source { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; padding: 14px 16px; background: #fff; border-radius: 9px; text-decoration: none; color: var(--ink); transition: transform .2s ease, background-color .2s ease; }
-.source:hover { transform: translateX(4px); background: #eef4f0; }
-.source-title { flex-basis: 100%; font-weight: 700; }
-.source .score, .source .time, .cand-meta, .sb-src { color: var(--muted); font-size: 12px; }
+.sources-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.sources-label { font-size: 11px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+.sources-count { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.source { display: grid; gap: 6px; padding: 14px 16px; background: #fff; border-radius: 9px; border-left: 3px solid var(--line); text-decoration: none; color: var(--ink); transition: transform .2s ease, background-color .2s ease, border-color .2s ease; }
+.source:hover { transform: translateX(3px); background: #eef4f0; border-left-color: var(--accent); }
+.source-head { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.source-domain { font-size: 12px; font-weight: 700; letter-spacing: -.01em; }
+.source-rel { margin-left: auto; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.source-title { font-size: 15px; font-weight: 700; line-height: 1.5; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.source-snippet { font-size: 13px; line-height: 1.65; color: var(--muted); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.source-meta { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.source-open { font-size: 12px; font-weight: 600; color: var(--accent); }
+.source-empty { padding: 12px 0; font-size: 13px; color: var(--muted); }
+.source .time, .cand-meta, .sb-src { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
 .auth { display: inline-block; padding: 3px 7px; background: #e5f4e7; color: #1b5c36; border-radius: 5px; font-size: 12px; }
 .auth.bad { background: #fde8e3; color: #ae3924; }
 .auth.low { background: var(--soft); color: var(--muted); }
@@ -143,7 +158,7 @@ textarea:focus { border-color: var(--blue); }
 .cand-title a { color: var(--ink); font-weight: 700; text-decoration: none; }
 .cand-sum { margin: 12px 0; color: var(--muted); }
 .cand-meta { display: flex; gap: 12px; flex-wrap: wrap; }
-@media (max-width: 760px) { .prog-steps { grid-template-columns: 1fr 1fr; } .source { display: block; } .source > * { margin-right: 7px; } }
+@media (max-width: 760px) { .prog-steps { grid-template-columns: 1fr 1fr; } .source { padding: 13px 14px; } .source-title { font-size: 14px; } }
 .reveal { opacity: 1; transform: none; }
 .reveal.is-visible { animation: rise-in .7s both; animation-delay: var(--delay, 0ms); }
 @keyframes rise-in { from { opacity: .01; transform: translateY(24px); } to { opacity: 1; transform: translateY(0); } }

@@ -379,16 +379,27 @@ function renderClaim(it, idx) {
   div.className = "claim " + (VCLS[dispV] || "noev");
   div.id = "card-" + idx;
 
-  const sources = (it.sources || []).map(s => {
+  const srcList = it.sources || [];
+  const domainCount = new Set(srcList.map(s => hostOf(s.url)).filter(Boolean)).size;
+  const sources = srcList.map(s => {
     const a = s.authority || {};
-    const authTag = a.tier >= 3
-      ? `<span class="auth">${a.label}</span>`
-      : (a.tier === 0 ? `<span class="auth bad">${a.label}</span>` : `<span class="auth low">${a.label}</span>`);
-    return `<a class="source" href="${s.url}" target="_blank" rel="noopener">
-       <span>🔗 ${s.title || s.source}</span>
-       <span class="score">相关${Math.round((s.score || 0) * 100)}%</span>
-       ${authTag}
-       <span class="time">${s.publish_time || ""}</span>
+    const authCls = a.tier >= 3 ? "auth" : (a.tier === 0 ? "auth bad" : "auth low");
+    const host = hostOf(s.url) || s.source || "";
+    const date = String(s.publish_time || "").slice(0, 10);
+    const rel = Math.round((s.score || 0) * 100);
+    const snippet = String(s.summary || "").trim();
+    return `<a class="source" href="${safeUrl(s.url)}" target="_blank" rel="noopener noreferrer">
+       <span class="source-head">
+         <span class="source-domain">${escapeHtml(host)}</span>
+         ${a.label ? `<span class="${authCls}">${escapeHtml(a.label)}</span>` : ""}
+         <span class="source-rel">相关 ${rel}%</span>
+       </span>
+       <span class="source-title">${escapeHtml(s.title || s.source || s.url || "（无标题）")}</span>
+       ${snippet ? `<span class="source-snippet">${escapeHtml(snippet)}</span>` : ""}
+       <span class="source-meta">
+         ${date ? `<span class="time">${escapeHtml(date)}</span>` : "<span></span>"}
+         <span class="source-open">打开原文 ↗</span>
+       </span>
      </a>`;
   }).join("");
 
@@ -423,7 +434,9 @@ function renderClaim(it, idx) {
     <div class="claim-note">${it.note}</div>
     ${codeLine}
     ${replanLine}
-    <div class="sources">${sources || '<span class="source">（无可用信源）</span>'}</div>
+    <div class="sources">${sources
+      ? `<div class="sources-head"><span class="sources-label">证据来源</span><span class="sources-count">${srcList.length} 条 · ${domainCount} 个独立站点</span></div>${sources}`
+      : '<span class="source-empty">这一条没有找到可用信源，所以不下结论。</span>'}</div>
     <div class="human-loop">
       <span class="hl-label">✋ 人工复核（点选你的判定）：</span>
       <span class="hl-chips">${chips}</span>
@@ -481,7 +494,23 @@ function applyOverride(idx, v) {
 }
 
 function escapeHtml(s) {
-  return (s || "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  return String(s == null ? "" : s).replace(/[&<>"']/g,
+    c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+// 搜索结果来自外部，URL 和标题都不能直接信任：
+// - 只放行 http/https，挡掉 javascript: 这类伪协议
+// - 域名单独提出来做展示，比一串长链接好认
+function safeUrl(u) {
+  try {
+    const x = new URL(String(u || ""), location.href);
+    return (x.protocol === "http:" || x.protocol === "https:") ? x.href : "#";
+  } catch (e) { return "#"; }
+}
+
+function hostOf(u) {
+  try { return new URL(String(u || "")).hostname.replace(/^www\./, ""); }
+  catch (e) { return ""; }
 }
 
 // —— 查模糊：线索检索模式，只摆证据不下结论 ——
@@ -508,9 +537,9 @@ function renderFuzzy(d) {
     const authTag = a.tier >= 3 ? `<span class="auth">${a.label}</span>`
       : (a.tier === 0 ? `<span class="auth bad">${a.label}</span>` : `<span class="auth low">${a.label}</span>`);
     return `<div class="claim noev cand">
-      <div class="cand-title"><a href="${c.url}" target="_blank" rel="noopener">🔗 ${escapeHtml(c.title) || escapeHtml(c.source)}</a> ${authTag}</div>
+      <div class="cand-title"><a href="${safeUrl(c.url)}" target="_blank" rel="noopener noreferrer">🔗 ${escapeHtml(c.title) || escapeHtml(c.source)}</a> ${authTag}</div>
       <div class="cand-sum">${escapeHtml(c.summary)}</div>
-      <div class="cand-meta"><span>${escapeHtml(c.source)}</span><span>相关 ${Math.round((c.score || 0) * 100)}%</span><span class="time">${c.publish_time || ""}</span></div>
+      <div class="cand-meta"><span>${escapeHtml(c.source)}</span><span>相关 ${Math.round((c.score || 0) * 100)}%</span><span class="time">${escapeHtml(String(c.publish_time || "").slice(0, 10))}</span></div>
     </div>`;
   }).join("");
 
